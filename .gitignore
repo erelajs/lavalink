@@ -1,0 +1,5 @@
+# folders
+node_modules
+dist
+.idea
+typings
