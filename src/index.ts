@@ -8,6 +8,4 @@ export * from "./types/Events"
 export * from "./types/IncomingPayloads"
 export * from "./types/OutgoingPayloads"
 
-export * from "./util"
-
 export const manager = LavalinkManager

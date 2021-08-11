@@ -1,9 +1,10 @@
-import { Player, PlayerOptions, State } from "erela.js-api";
+import { Player, PlayerOptions } from "erela.js";
 import { container } from "tsyringe";
 import { LavalinkManager } from "./LavalinkManager";
 import { LavalinkNode } from "./LavalinkNode";
 import { OutgoingEvents } from "../types/Events" 
 import { OutgoingPlayPayload } from "../types/OutgoingPayloads";
+import { State } from "../util/State";
 
 export interface LavalinkPlayerOptions extends PlayerOptions {
     node?: string;

@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import { once } from 'events';
 import { container } from 'tsyringe';
 import { ConnectionEvents, OutgoingEvents, WebSocketEvents } from '../types/Events';
-import { enumerable, isObject, mergeDefault, DefaultNodeOptions, DefaultStatsOptions } from '../util';
+import { enumerable, isObject, mergeDefault, DefaultNodeOptions, DefaultStatsOptions } from 'erela.js-utils';
 
 import type { LavalinkManager } from './LavalinkManager';
 import type { IncomingPayload, IncomingStatsPayload } from '../types/IncomingPayloads';

@@ -3,10 +3,11 @@
 import { container } from 'tsyringe';
 import EventEmitter from 'events';
 
-import { Manager, ManagerOptions, PlayerOptions } from 'erela.js-api';
+import { Manager, ManagerOptions, PlayerOptions } from 'erela.js';
 import { LavalinkPlayer } from './LavalinkPlayer';
 import Collection from '@discordjs/collection';
 import { LavalinkNode, NodeOptions } from './LavalinkNode';
+import { Plugin } from 'erela.js/api/Plugin';
 
 export interface LavalinkManagerOptions extends ManagerOptions {
     nodes: NodeOptions[];
@@ -40,6 +41,11 @@ export class LavalinkManager extends EventEmitter implements Manager {
      * The Players associated to this Manager.
      */
     public players = new Collection<string, LavalinkPlayer>()
+    
+    /**
+     * The Plugins added to this Manager.
+     */
+    public plugins = new Collection<string, Plugin>()
 
     /**
      * The options for the lavalink audio provider.
