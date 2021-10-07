@@ -2,17 +2,79 @@ import WebSocket from 'ws';
 import { once } from 'events';
 import { container } from 'tsyringe';
 import { ConnectionEvents, OutgoingEvents, WebSocketEvents } from '../types/Events';
-import { enumerable, isObject, mergeDefault, DefaultNodeOptions, DefaultStatsOptions } from 'erela.js-utils';
+import { enumerable, isObject, mergeDefault } from 'erela.js-utils';
 
-import type { LavalinkManager } from './LavalinkManager';
 import type { IncomingPayload, IncomingStatsPayload } from '../types/IncomingPayloads';
 import type { OutgoingPayload } from '../types/OutgoingPayloads';
+import { LavalinkManager } from './LavalinkManager';
+import { DefaultNodeOptions, DefaultStatsOptions } from '../util/constants';
 
 interface Sendable {
 	resolve: () => void;
 	reject: (e: Error) => void;
 	data: Buffer | string;
 }
+
+/**
+ * The options for the node.
+ */
+export interface NodeOptions {
+
+	/**
+	 * Id of the node.
+	 * @example
+	 * ```json
+	 * 'node1'
+	 * ```
+	 */
+	id: string;
+
+	/**
+	 * The password to use to login to the Lavalink server.
+	 * @example
+	 * ```json
+	 * 'you-shall-not-pass'
+	 * ```
+	 */
+	password: string;
+
+	/**
+	 * A URL to your Lavalink instance without protocol.
+	 * @example
+	 * ```json
+	 * 'localhost:2333'
+	 * ```
+	 */
+	host: string;
+
+	/**
+	 * The resume key to send to the Node so you can resume properly.
+	 * @example
+	 * ```json
+	 * erela
+	 * ```
+	 */
+	resumeKey?: string;
+
+	/**
+	 * The resume timeout
+	 * @example
+	 * ```json
+	 * 120
+	 * ```
+	 */
+	resumeTimeout: number;
+
+	/**
+	 * The interval that the node will try to reconnect to lavalink at in milliseconds.
+	 * @example
+	 * ```json
+	 * 10000
+	 * ```
+	 */
+	reconnectInterval: number;
+}
+
 
 export class LavalinkNode implements NodeOptions {
 	/**
@@ -31,12 +93,6 @@ export class LavalinkNode implements NodeOptions {
 	 */
 	@enumerable(false)
 	public password: NodeOptions['password'];
-
-	/**
-	 * The port to the Node.
-	 */
-	@enumerable(false)
-	public port: NodeOptions['port'];
 
 	/**
 	 * The interval that the node will try to reconnect to lavalink at in milliseconds
@@ -62,11 +118,6 @@ export class LavalinkNode implements NodeOptions {
 	 * The websocket instance for this Node.
 	 */
 	public ws: WebSocket | null = null;
-
-	/**
-	 * The amount of search requests this node has made.
-	 */
-	public calls = 0;
 
 	/**
 	 * The reconnect timeout
@@ -108,12 +159,11 @@ export class LavalinkNode implements NodeOptions {
 	 */
 	public constructor(options: Partial<NodeOptions>) {
 		if (!isObject(options)) throw TypeError('The node options should be of type object!');
-		mergeDefault(DefaultNodeOptions as Required<NodeOptions>, options);
-		mergeDefault(DefaultStatsOptions as Required<Omit<IncomingStatsPayload, 'op'>>, this.stats);
+		mergeDefault(DefaultNodeOptions, options);
+		mergeDefault(DefaultStatsOptions, this.stats);
 
 		this.id = options.id ?? options.host;
 		this.host = options.host;
-		this.port = options.port;
 		this.password = options.password;
 		this.reconnectInterval = options.reconnectInterval;
 		this.resumeKey = options.resumeKey;
@@ -140,7 +190,6 @@ export class LavalinkNode implements NodeOptions {
 		if (!this.ws) return false;
 		return this.ws.readyState === WebSocket.OPEN;
 	}
-
 
 	/**
 	 * Sends a message to the websocket.
@@ -184,17 +233,17 @@ export class LavalinkNode implements NodeOptions {
 
 			this.manager.emit(ConnectionEvents.CLOSE, ...(await once(this.ws, WebSocketEvents.CLOSE)));
 		}
+
 		const headers: Record<string, string> = {
 			Authorization: this.password,
 			'Num-Shards': String(this.manager.shardCount ?? 1),
 			'Client-Name': `erela.js v${this.manager.version}`,
-			'User-Id': this.manager.user
+			'User-Id': this.manager.userId
 		};
 
 		if (this.resumeKey) headers['Resume-Key'] = this.resumeKey;
 
-
-		this.ws = new WebSocket(`ws://${this.host}:${this.port}/`, { headers });
+		this.ws = new WebSocket(`ws://${this.host}/`, { headers });
 		this._registerWSEventListeners();
 
 		return new Promise<void>((resolve, reject) => {
@@ -311,73 +360,4 @@ export class LavalinkNode implements NodeOptions {
 		this.#queue = [];
 	}
 
-}
-
-/**
- * The options for the node.
- */
-export interface NodeOptions {
-
-	/**
-	 * Id of the node.
-	 * @example
-	 * ```json
-	 * 'node1'
-	 * ```
-	 */
-	id: string;
-
-	/**
-	 * The password to use to login to the Lavalink server.
-	 * @example
-	 * ```json
-	 * 'you-shall-not-pass'
-	 * ```
-	 */
-	password: string;
-
-	/**
-	 * A URL to your Lavalink instance without protocol.
-	 * @example
-	 * ```json
-	 * 'localhost'
-	 * ```
-	 */
-	host: string;
-
-	/**
-	 * Port to your lavalink instance.
-	 * @example
-	 * ```json
-	 * 2333
-	 * ```
-	 */
-	port: number;
-
-	/**
-	 * The resume key to send to the Node so you can resume properly.
-	 * @example
-	 * ```json
-	 * erela
-	 * ```
-	 */
-	resumeKey?: string;
-
-	/**
-	 * The resume timeout
-	 * @example
-	 * ```json
-	 * 120
-	 * ```
-	 */
-	resumeTimeout: number;
-
-	/**
-	 * The interval that the node will try to reconnect to lavalink at in milliseconds.
-	 * @example
-	 * ```json
-	 * 10000
-	 * ```
-	 */
-	reconnectInterval: number;
 }

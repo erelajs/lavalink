@@ -3,8 +3,7 @@ import type { IncomingStatsPayload } from "../types/IncomingPayloads";
 
 export const DefaultNodeOptions: Omit<NodeOptions, 'id'> = {
     password: 'youshallnotpass',
-    host: 'localhost',
-    port: 2333,
+    host: 'localhost:2333',
     resumeTimeout: 120,
     reconnectInterval: 10000
 } as const;

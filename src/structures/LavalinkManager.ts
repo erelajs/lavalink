@@ -3,18 +3,20 @@
 import { container } from 'tsyringe';
 import EventEmitter from 'events';
 
-import { Manager, ManagerOptions, PlayerOptions } from 'erela.js';
-import { LavalinkPlayer } from './LavalinkPlayer';
+import { Manager, ManagerOptions, PlayerOptions, Plugin } from 'erela.js';
 import Collection from '@discordjs/collection';
+import { LavalinkPlayer } from './LavalinkPlayer';
 import { LavalinkNode, NodeOptions } from './LavalinkNode';
-import { Plugin } from 'erela.js/api/Plugin';
+import { OutgoingVoiceUpdatePayload } from '../types/OutgoingPayloads';
+import { OutgoingEvents } from '../types/Events';
+import { GatewayVoiceServerUpdateDispatch, GatewayVoiceStateUpdateDispatch } from 'discord-api-types/v8';
 
 export interface LavalinkManagerOptions extends ManagerOptions {
+    userId?: string;
+    shards?: number;
     nodes: NodeOptions[];
     send: (id: string, payload: NodeJS.Dict<unknown>) => Promise<void>;
 }
-
-const TEMPLATE = JSON.stringify(["event", "guildId", "op", "sessionId"]);
 
 export class LavalinkManager extends EventEmitter implements Manager {
     /**
@@ -25,7 +27,7 @@ export class LavalinkManager extends EventEmitter implements Manager {
     /**
      * The user id of the bot this Manager is managing
      */
-    public user!: string;
+    public userId!: string;
 
     /**
      * The amount of shards the bot has, by default it's 1
@@ -42,26 +44,37 @@ export class LavalinkManager extends EventEmitter implements Manager {
      */
     public players = new Collection<string, LavalinkPlayer>()
     
-    /**
-     * The Plugins added to this Manager.
-     */
+    // inherits jsdoc
     public plugins = new Collection<string, Plugin>()
 
     /**
-     * The options for the lavalink audio provider.
+     * Send voice state packets to Discord for joining/leaving voice channels.
      */
-    public options: LavalinkManagerOptions;
+    public sendPacket: LavalinkManagerOptions['send'];
+    
+    /**
+     * The Player voice states.
+     */
+    #voiceStates = new Collection<string, OutgoingVoiceUpdatePayload>()
 
     public constructor(options: LavalinkManagerOptions) {
         super();
 
-        this.options = options;
+        this.sendPacket = options.send;
+        if (options.shards) this.shardCount = options.shards;
+        if (options.userId) this.userId = options.userId;
 
-        // plugins
+        if (options.plugins) {
+            for (let plugin of options.plugins) {
+                plugin.load(this);
+            }
+        }
 
-        for (const nodeOptions of this.options.nodes) {
-            const node = new LavalinkNode(nodeOptions);
-            this.nodes.set(node.id, node);
+        if (options.nodes) {
+            for (const nodeOptions of options.nodes) {
+                const node = new LavalinkNode(nodeOptions);
+                this.nodes.set(node.id, node);
+            }
         }
 
         container
@@ -69,13 +82,12 @@ export class LavalinkManager extends EventEmitter implements Manager {
             .registerInstance('LavalinkManager', this)
     }
 
-
-    /** Returns the least used Nodes. */
-    public get leastUsedNodes(): Collection<string, LavalinkNode> {
-        return this.nodes
-            .filter((node) => node.connected)
-            .sort((a, b) => b.calls - a.calls);
-    }
+    // /** Returns the least used Nodes. */
+    // public get leastUsedNodes(): Collection<string, LavalinkNode> {
+    //     return this.nodes
+    //         .filter((node) => node.connected)
+    //         .sort((a, b) => b.calls - a.calls);
+    // }
 
     /** Returns the least system load Nodes. */
     public get leastLoadNodes(): Collection<string, LavalinkNode> {
@@ -91,75 +103,77 @@ export class LavalinkManager extends EventEmitter implements Manager {
                 return aload - bload;
             });
     }
-    public async init(user: string): Promise<void> {
-        this.user = user;
+    
+    /**
+     * Initializes the Lavalink Manager and connects to the provided Lavalink nodes.
+     */
+    public async init(userId?: string): Promise<void> {
+        if (userId) this.userId = userId;
         
         await Promise.all(this.nodes.map(node => node.connect()))
     }
 
-    use(plugin: Plugin): void;
-    use(plugins: Plugin[]): void;
-    use(plugins: Plugin | Plugin[]): void {
-        plugins;
-        throw new Error('Method not implemented.');
+    // inherits jsdoc
+    public use(...plugins: Plugin[]): void {
+        for (let plugin of plugins) {
+            plugin.load(this);
+        }
     }
 
-    create(guild: string): LavalinkPlayer;
-    create(options: PlayerOptions): LavalinkPlayer;
-    create(guildOrOptions: string | PlayerOptions): LavalinkPlayer {
+    // inherits jsdoc
+    public create(guild: string): LavalinkPlayer;
+    public create(options: PlayerOptions): LavalinkPlayer;
+    public create(guildOrOptions: string | PlayerOptions): LavalinkPlayer {
         const guild = typeof guildOrOptions === "string" ? guildOrOptions : guildOrOptions.guild;
-
-        if (this.players.has(guild)) {
-            return this.players.get(guild);
-        }
+        if (this.players.has(guild)) return this.players.get(guild);
 
         const options = typeof guildOrOptions === "string" ? { guild: guildOrOptions } : guildOrOptions;
-        const player = new LavalinkPlayer(options);
-
-        this.players.set(guild, player);
-
-        return player
+        return new LavalinkPlayer(options)
     }
 
-    destroy(guild: string): void;
-    destroy(player: LavalinkPlayer): void;
-    destroy(player: string | LavalinkPlayer): void {
-        player;
-        throw new Error('Method not implemented.');
+    // inherits jsdoc
+    public get(guild: string): LavalinkPlayer | null {
+        return this.players.get(guild);   
     }
 
+    // inherits jsdoc
+    public async destroy(guild: string, disconnect: boolean = true): Promise<boolean> {
+        const player = this.get(guild);
+        if (!player) return false;
+
+        await player.destroy(disconnect);
+        return true;
+    }
 
     /**
      * Sends voice data to the Lavalink server.
      * @param data
      */
-    public async updateVoiceState(data: any): Promise<void> {
-        if (
-            !data ||
-            !["VOICE_SERVER_UPDATE", "VOICE_STATE_UPDATE"].includes(data.t || "")
-        )
-            return;
+    public async updateVoiceState(
+        data: GatewayVoiceStateUpdateDispatch | GatewayVoiceServerUpdateDispatch
+    ): Promise<void> {
+        if (!data || !["VOICE_SERVER_UPDATE", "VOICE_STATE_UPDATE"].includes(data.t || "")) return;
         const player = this.players.get(data.d.guild_id);
 
         if (!player) return;
-        const state = player.voiceState;
+        const state = this.#voiceStates[player.guild] ?? {} as OutgoingVoiceUpdatePayload;
 
         if (data.t === "VOICE_SERVER_UPDATE") {
-            state.op = "voiceUpdate";
             state.guildId = data.d.guild_id;
             state.event = data.d;
         } else {
-            if (data.d.user_id !== this.user) return;
+            if (data.d.user_id !== this.userId) return;
             state.sessionId = data.d.session_id;
 
             if (player.voiceChannel !== data.d.channel_id) {
                 this.emit("playerMove", player, player.voiceChannel, data.d.channel_id);
-                data.d.channel_id = player.voiceChannel;
+                player.voiceChannel = data.d.channel_id;
             }
         }
 
-        player.voiceState = state;
-        if (JSON.stringify(Object.keys(state).sort()) === TEMPLATE)
-            await player.node.send(state);
+        this.#voiceStates[player.guild] = state;
+        if (Object.keys(state).length == 3) {
+            await player.node.send({ op: OutgoingEvents.VOICE_UPDATE, ...state });
+        }
     }
 }

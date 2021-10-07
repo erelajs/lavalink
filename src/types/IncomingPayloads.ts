@@ -42,7 +42,7 @@ export interface IncomingStatsPayload {
 	frames?: IncomingStatsPayloadFrames;
 }
 
-interface IIncomingEvent {
+interface IncomingEvent {
 	op: Events.EVENT;
 	guildId: string;
 }
@@ -54,12 +54,12 @@ export type IncomingEventPayload =
 	| IncomingEventTrackStuckPayload
 	| IncomingEventWebSocketClosedPayload;
 
-export interface IncomingEventStartPayload extends IIncomingEvent {
+export interface IncomingEventStartPayload extends IncomingEvent {
 	type: Events.TRACK_START_EVENT;
 	track: string;
 }
 
-export interface IncomingEventTrackEndPayload extends IIncomingEvent {
+export interface IncomingEventTrackEndPayload extends IncomingEvent {
 	type: Events.TRACK_END_EVENT;
 	track: string;
 	reason: string;
@@ -90,7 +90,7 @@ export interface IncomingEventTrackExceptionPayloadException {
 	cause: string;
 }
 
-export interface IncomingEventTrackExceptionPayload extends IIncomingEvent {
+export interface IncomingEventTrackExceptionPayload extends IncomingEvent {
 	type: Events.TRACK_EXCEPTION_EVENT;
 
 	/**
@@ -104,7 +104,7 @@ export interface IncomingEventTrackExceptionPayload extends IIncomingEvent {
 	exception: IncomingEventTrackExceptionPayloadException;
 }
 
-export interface IncomingEventTrackStuckPayload extends IIncomingEvent {
+export interface IncomingEventTrackStuckPayload extends IncomingEvent {
 	type: Events.TRACK_STUCK_EVENT;
 
 	/**
@@ -118,7 +118,7 @@ export interface IncomingEventTrackStuckPayload extends IIncomingEvent {
 	thresholdMs: number;
 }
 
-export interface IncomingEventWebSocketClosedPayload extends IIncomingEvent {
+export interface IncomingEventWebSocketClosedPayload extends IncomingEvent {
 	type: Events.WEBSOCKET_CLOSED_EVENT;
 
 	/**
